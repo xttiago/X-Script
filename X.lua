@@ -33,12 +33,13 @@ local function ApplyHighlight(player)
     if player == LocalPlayer then return end
     local function setup(char)
         if not char then return end
-        if char:FindFirstChild("X_ESP") then char["X_ESP"]:Destroy() end
+        if char:FindFirstChild("X_ESP") then char.X_ESP:Destroy() end
         if ESP_ENABLED then
-            local hl = Instance.new("Highlight", char)
+            local hl = Instance.new("Highlight")
             hl.Name = "X_ESP"
             hl.FillTransparency = 1
             hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.Parent = char
         end
     end
     setup(player.Character)
@@ -52,24 +53,30 @@ local function UpdateSpeed()
     end
 end
 
-if CoreGui:FindFirstChild("X_Project") then CoreGui["X_Project"]:Destroy() end
+if CoreGui:FindFirstChild("X_Project") then
+    CoreGui.X_Project:Destroy()
+end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "X_Project"
 ScreenGui.Parent = CoreGui
 
-local MainFrame = Instance.new("CanvasGroup") 
-MainFrame.Size = UDim2.new(0, 200, 0, 180) 
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 200, 0, 180)
 MainFrame.Position = UDim2.new(0.5, -100, 0.5, -90)
 MainFrame.BackgroundColor3 = UI_CONFIG.MainColor
 MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true -- CORRIGE O ARREDONDAMENTO DO TOPO
+MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner", MainFrame)
-MainCorner.CornerRadius = UDim.new(0, 10)
+local MainGroup = Instance.new("CanvasGroup")
+MainGroup.Parent = MainFrame
 
-Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(45, 45, 45)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(45, 45, 45)
+Stroke.Parent = MainFrame
 
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 30)
@@ -77,8 +84,7 @@ Header.BackgroundColor3 = UI_CONFIG.HeaderColor
 Header.BorderSizePixel = 0
 Header.Parent = MainFrame
 
-local HeaderCorner = Instance.new("UICorner", Header)
-HeaderCorner.CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -35, 1, 0)
@@ -102,6 +108,7 @@ CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 10
 CloseBtn.AutoButtonColor = false
 CloseBtn.Parent = Header
+
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
 
 local Container = Instance.new("Frame")
@@ -114,7 +121,7 @@ local Layout = Instance.new("UIListLayout")
 Layout.Parent = Container
 Layout.Padding = UDim.new(0, 8)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-Layout.SortOrder = Enum.SortOrder.LayoutOrder -- ATIVA A ORDEM MANUAL
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local function CreateButton(name, text, order)
     local btn = Instance.new("TextButton")
@@ -138,7 +145,7 @@ local SpeedBtn = CreateButton("SpeedBtn", "SPEED: OFF", 2)
 local SliderFrame = Instance.new("Frame")
 SliderFrame.Size = UDim2.new(0, 180, 0, 35)
 SliderFrame.BackgroundTransparency = 1
-SliderFrame.LayoutOrder = 3 
+SliderFrame.LayoutOrder = 3
 SliderFrame.Parent = Container
 
 local SliderLabel = Instance.new("TextLabel")
@@ -155,12 +162,14 @@ SliderBG.Size = UDim2.new(1, 0, 0, 4)
 SliderBG.Position = UDim2.new(0, 0, 0, 20)
 SliderBG.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 SliderBG.Parent = SliderFrame
+
 Instance.new("UICorner", SliderBG)
 
 local SliderFill = Instance.new("Frame")
-SliderFill.Size = UDim2.new((WALK_SPEED_VALUE - MIN_SPEED)/(MAX_SPEED - MIN_SPEED), 0, 1, 0)
+SliderFill.Size = UDim2.new((WALK_SPEED_VALUE - MIN_SPEED) / (MAX_SPEED - MIN_SPEED), 0, 1, 0)
 SliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 SliderFill.Parent = SliderBG
+
 Instance.new("UICorner", SliderFill)
 
 local function SetupAction(btn, isToggle)
@@ -168,17 +177,24 @@ local function SetupAction(btn, isToggle)
         if not isToggle then return UI_CONFIG.CloseDefault end
         if btn == ESPBtn then return ESP_ENABLED and UI_CONFIG.OnColor or UI_CONFIG.OffColor end
         if btn == SpeedBtn then return SPEED_ENABLED and UI_CONFIG.OnColor or UI_CONFIG.OffColor end
+        return UI_CONFIG.OffColor
     end
 
     btn.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
             local press = (btn == CloseBtn) and UI_CONFIG.CloseHover or UI_CONFIG.PressColor
-            CreateTween(btn, {BackgroundColor3 = press, Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 175, 0, 32))})
+            CreateTween(btn, {
+                BackgroundColor3 = press,
+                Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 175, 0, 32))
+            })
         end
     end)
 
     local function Reset()
-        CreateTween(btn, {BackgroundColor3 = GetStateColor(), Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 180, 0, 34))})
+        CreateTween(btn, {
+            BackgroundColor3 = GetStateColor(),
+            Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 180, 0, 34))
+        })
     end
 
     btn.InputEnded:Connect(Reset)
@@ -187,14 +203,18 @@ local function SetupAction(btn, isToggle)
     btn.Activated:Connect(function()
         if btn == ESPBtn then
             ESP_ENABLED = not ESP_ENABLED
-            for _, p in pairs(Players:GetPlayers()) do ApplyHighlight(p) end
+            for _, p in pairs(Players:GetPlayers()) do
+                ApplyHighlight(p)
+            end
             btn.Text = "ESP: " .. (ESP_ENABLED and "ON" or "OFF")
         elseif btn == SpeedBtn then
             SPEED_ENABLED = not SPEED_ENABLED
             UpdateSpeed()
             btn.Text = "SPEED: " .. (SPEED_ENABLED and "ON" or "OFF")
         elseif btn == CloseBtn then
-            CreateTween(MainFrame, {GroupTransparency = 1}, 0.2).Completed:Connect(function() ScreenGui:Destroy() end)
+            CreateTween(MainGroup, {GroupTransparency = 1}, 0.2).Completed:Connect(function()
+                ScreenGui:Destroy()
+            end)
         end
         Reset()
     end)
@@ -205,27 +225,68 @@ SetupAction(SpeedBtn, true)
 SetupAction(CloseBtn, false)
 
 local sliding = false
+
 local function UpdateSlider(input)
-    local ratio = math.clamp((input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
+    local ratio = math.clamp(
+        (input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X,
+        0,
+        1
+    )
     SliderFill.Size = UDim2.new(ratio, 0, 1, 0)
-    WALK_SPEED_VALUE = math.floor(MIN_SPEED + (ratio * (MAX_SPEED - MIN_SPEED)))
+    WALK_SPEED_VALUE = math.floor(MIN_SPEED + ratio * (MAX_SPEED - MIN_SPEED))
     SliderLabel.Text = "VELOCIDADE: " .. WALK_SPEED_VALUE
     if SPEED_ENABLED then UpdateSpeed() end
 end
 
-SliderBG.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then sliding = true UpdateSlider(i) end end)
-UserInputService.InputChanged:Connect(function(i) if sliding and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then UpdateSlider(i) end end)
-UserInputService.InputEnded:Connect(function() sliding = false end)
+SliderBG.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliding = true
+        UpdateSlider(i)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+    if sliding and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+        UpdateSlider(i)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function()
+    sliding = false
+end)
 
 local drag, dStart, sPos
-Header.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true dStart = i.Position sPos = MainFrame.Position end end)
-UserInputService.InputChanged:Connect(function(i) if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-    local delta = i.Position - dStart
-    MainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + delta.X, sPos.Y.Scale, sPos.Y.Offset + delta.Y)
-end end)
-Header.InputEnded:Connect(function() drag = false end)
 
-MainFrame.GroupTransparency = 1
-CreateTween(MainFrame, {GroupTransparency = 0}, 0.4)
+Header.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+        drag = true
+        dStart = i.Position
+        sPos = MainFrame.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+    if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = i.Position - dStart
+        MainFrame.Position = UDim2.new(
+            sPos.X.Scale,
+            sPos.X.Offset + delta.X,
+            sPos.Y.Scale,
+            sPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+Header.InputEnded:Connect(function()
+    drag = false
+end)
+
+MainGroup.GroupTransparency = 1
+CreateTween(MainGroup, {GroupTransparency = 0}, 0.4)
+
 Players.PlayerAdded:Connect(ApplyHighlight)
-LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5); UpdateSpeed() end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    UpdateSpeed()
+end)
