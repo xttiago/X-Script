@@ -1,13 +1,16 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
-local VERSION = "v1.0.1"
+local VERSION = "v1.0.2"
 local WALK_SPEED_VALUE = 60
 local MAX_SPEED = 200
 local MIN_SPEED = 16
+local FLY_SPEED = 50
 
 local UI_CONFIG = {
     MainColor = Color3.fromRGB(12, 12, 12),
@@ -21,10 +24,20 @@ local UI_CONFIG = {
 
 local ESP_ENABLED = false
 local SPEED_ENABLED = false
+local FLY_ENABLED = false
+local IS_MINIMIZED = false
 
-local function CreateTween(obj, target, duration)
+local bodyVelocity = nil
+local flyConnection = nil
+local controlFrame = nil
+local upPressed = false
+local downPressed = false
+
+local pcKeys = {W = false, A = false, S = false, D = false, Space = false, Shift = false}
+
+local function CreateTween(obj, props, duration)
     local info = TweenInfo.new(duration or 0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(obj, info, target)
+    local tween = TweenService:Create(obj, info, props)
     tween:Play()
     return tween
 end
@@ -39,6 +52,7 @@ local function ApplyHighlight(player)
             hl.Name = "X_ESP"
             hl.FillTransparency = 1
             hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.OutlineTransparency = 0
             hl.Parent = char
         end
     end
@@ -53,17 +67,138 @@ local function UpdateSpeed()
     end
 end
 
+local function CreateFlyControls()
+    if controlFrame then controlFrame:Destroy() end
+    controlFrame = Instance.new("Frame")
+    controlFrame.Name = "FlyControls"
+    controlFrame.Size = UDim2.new(0, 100, 0, 140)
+    controlFrame.Position = UDim2.new(1, -120, 0.5, -70)
+    controlFrame.BackgroundTransparency = 1
+    controlFrame.Visible = false
+    controlFrame.Parent = ScreenGui
+
+    local upBtn = Instance.new("TextButton")
+    upBtn.Size = UDim2.new(1, 0, 0.45, 0)
+    upBtn.Position = UDim2.new(0, 0, 0, 0)
+    upBtn.BackgroundColor3 = Color3.fromRGB(60, 180, 80)
+    upBtn.Text = "↑ SUBIR"
+    upBtn.TextColor3 = Color3.new(1,1,1)
+    upBtn.Font = Enum.Font.GothamBold
+    upBtn.TextSize = 16
+    upBtn.Parent = controlFrame
+    Instance.new("UICorner", upBtn).CornerRadius = UDim.new(0, 10)
+
+    local downBtn = Instance.new("TextButton")
+    downBtn.Size = UDim2.new(1, 0, 0.45, 0)
+    downBtn.Position = UDim2.new(0, 0, 0.55, 0)
+    downBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+    downBtn.Text = "↓ DESCER"
+    downBtn.TextColor3 = Color3.new(1,1,1)
+    downBtn.Font = Enum.Font.GothamBold
+    downBtn.TextSize = 16
+    downBtn.Parent = controlFrame
+    Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0, 10)
+
+    upBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            upPressed = true
+            CreateTween(upBtn, {BackgroundColor3 = Color3.fromRGB(40, 120, 50)})
+        end
+    end)
+    upBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            upPressed = false
+            CreateTween(upBtn, {BackgroundColor3 = Color3.fromRGB(60, 180, 80)})
+        end
+    end)
+
+    downBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            downPressed = true
+            CreateTween(downBtn, {BackgroundColor3 = Color3.fromRGB(120, 40, 40)})
+        end
+    end)
+    downBtn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            downPressed = false
+            CreateTween(downBtn, {BackgroundColor3 = Color3.fromRGB(180, 60, 60)})
+        end
+    end)
+end
+
+local function UpdateFly()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not root or not humanoid then return end
+
+    if FLY_ENABLED then
+        humanoid.PlatformStand = true
+        if bodyVelocity then bodyVelocity:Destroy() end
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.MaxForce = Vector3.new(90000, 90000, 90000)
+        bodyVelocity.Velocity = Vector3.new()
+        bodyVelocity.Parent = root
+
+        if flyConnection then flyConnection:Disconnect() end
+        flyConnection = RunService.Heartbeat:Connect(function()
+            local move = humanoid.MoveDirection * FLY_SPEED
+            local vertical = 0
+            if upPressed then vertical = vertical + FLY_SPEED end
+            if downPressed then vertical = vertical - FLY_SPEED end
+            if pcKeys.Space then vertical = vertical + FLY_SPEED end
+            if pcKeys.Shift then vertical = vertical - FLY_SPEED end
+            bodyVelocity.Velocity = move + Vector3.new(0, vertical, 0)
+        end)
+
+        CreateFlyControls()
+        controlFrame.Visible = true
+    else
+        humanoid.PlatformStand = false
+        if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+        if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+        upPressed = false
+        downPressed = false
+        if controlFrame then controlFrame.Visible = false end
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    local key = input.KeyCode
+    if key == Enum.KeyCode.W then pcKeys.W = true
+    elseif key == Enum.KeyCode.A then pcKeys.A = true
+    elseif key == Enum.KeyCode.S then pcKeys.S = true
+    elseif key == Enum.KeyCode.D then pcKeys.D = true
+    elseif key == Enum.KeyCode.Space then pcKeys.Space = true
+    elseif key == Enum.KeyCode.LeftShift or key == Enum.KeyCode.RightShift then pcKeys.Shift = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    local key = input.KeyCode
+    if key == Enum.KeyCode.W then pcKeys.W = false
+    elseif key == Enum.KeyCode.A then pcKeys.A = false
+    elseif key == Enum.KeyCode.S then pcKeys.S = false
+    elseif key == Enum.KeyCode.D then pcKeys.D = false
+    elseif key == Enum.KeyCode.Space then pcKeys.Space = false
+    elseif key == Enum.KeyCode.LeftShift or key == Enum.KeyCode.RightShift then pcKeys.Shift = false
+    end
+end)
+
 if CoreGui:FindFirstChild("X_Project") then
     CoreGui.X_Project:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "X_Project"
+ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 200, 0, 180)
-MainFrame.Position = UDim2.new(0.5, -100, 0.5, -90)
+MainFrame.Size = UDim2.new(0, 200, 0, 220)
+MainFrame.Position = UDim2.new(0.5, -100, 0.5, -110)
 MainFrame.BackgroundColor3 = UI_CONFIG.MainColor
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -87,7 +222,7 @@ Header.Parent = MainFrame
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -35, 1, 0)
+Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "X <font size='9' color='rgb(150,150,150)'>" .. VERSION .. "</font>"
@@ -105,11 +240,22 @@ CloseBtn.BackgroundColor3 = UI_CONFIG.CloseDefault
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextSize = 10
+CloseBtn.TextSize = 12
 CloseBtn.AutoButtonColor = false
 CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 5)
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 22, 0, 22)
+MinBtn.Position = UDim2.new(1, -52, 0.5, -11)
+MinBtn.BackgroundColor3 = UI_CONFIG.CloseDefault
+MinBtn.Text = "−"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.AutoButtonColor = false
+MinBtn.Parent = Header
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
 
 local Container = Instance.new("Frame")
 Container.Size = UDim2.new(1, 0, 1, -35)
@@ -123,7 +269,7 @@ Layout.Padding = UDim.new(0, 8)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
-local function CreateButton(name, text, order)
+local function CreateToggleButton(name, text, order)
     local btn = Instance.new("TextButton")
     btn.Name = name
     btn.Size = UDim2.new(0, 180, 0, 34)
@@ -139,8 +285,8 @@ local function CreateButton(name, text, order)
     return btn
 end
 
-local ESPBtn = CreateButton("ESPBtn", "ESP: OFF", 1)
-local SpeedBtn = CreateButton("SpeedBtn", "SPEED: OFF", 2)
+local ESPBtn = CreateToggleButton("ESPBtn", "ESP: OFF", 1)
+local SpeedBtn = CreateToggleButton("SpeedBtn", "SPEED: OFF", 2)
 
 local SliderFrame = Instance.new("Frame")
 SliderFrame.Size = UDim2.new(0, 180, 0, 35)
@@ -162,38 +308,39 @@ SliderBG.Size = UDim2.new(1, 0, 0, 4)
 SliderBG.Position = UDim2.new(0, 0, 0, 20)
 SliderBG.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 SliderBG.Parent = SliderFrame
-
 Instance.new("UICorner", SliderBG)
 
 local SliderFill = Instance.new("Frame")
 SliderFill.Size = UDim2.new((WALK_SPEED_VALUE - MIN_SPEED) / (MAX_SPEED - MIN_SPEED), 0, 1, 0)
 SliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 SliderFill.Parent = SliderBG
-
 Instance.new("UICorner", SliderFill)
 
-local function SetupAction(btn, isToggle)
-    local function GetStateColor()
+local FlyBtn = CreateToggleButton("FlyBtn", "FLY: OFF", 4)
+
+local function SetupButton(btn, isToggle)
+    local function GetColor()
         if not isToggle then return UI_CONFIG.CloseDefault end
         if btn == ESPBtn then return ESP_ENABLED and UI_CONFIG.OnColor or UI_CONFIG.OffColor end
         if btn == SpeedBtn then return SPEED_ENABLED and UI_CONFIG.OnColor or UI_CONFIG.OffColor end
+        if btn == FlyBtn then return FLY_ENABLED and UI_CONFIG.OnColor or UI_CONFIG.OffColor end
         return UI_CONFIG.OffColor
     end
 
-    btn.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-            local press = (btn == CloseBtn) and UI_CONFIG.CloseHover or UI_CONFIG.PressColor
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local press = (btn == CloseBtn or btn == MinBtn) and UI_CONFIG.CloseHover or UI_CONFIG.PressColor
             CreateTween(btn, {
                 BackgroundColor3 = press,
-                Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 175, 0, 32))
+                Size = (btn == CloseBtn or btn == MinBtn) and btn.Size or UDim2.new(0, 175, 0, 32)
             })
         end
     end)
 
     local function Reset()
         CreateTween(btn, {
-            BackgroundColor3 = GetStateColor(),
-            Size = (btn == CloseBtn and btn.Size or UDim2.new(0, 180, 0, 34))
+            BackgroundColor3 = GetColor(),
+            Size = (btn == CloseBtn or btn == MinBtn) and btn.Size or UDim2.new(0, 180, 0, 34)
         })
     end
 
@@ -203,51 +350,62 @@ local function SetupAction(btn, isToggle)
     btn.Activated:Connect(function()
         if btn == ESPBtn then
             ESP_ENABLED = not ESP_ENABLED
-            for _, p in pairs(Players:GetPlayers()) do
-                ApplyHighlight(p)
-            end
+            for _, p in Players:GetPlayers() do ApplyHighlight(p) end
             btn.Text = "ESP: " .. (ESP_ENABLED and "ON" or "OFF")
         elseif btn == SpeedBtn then
             SPEED_ENABLED = not SPEED_ENABLED
             UpdateSpeed()
             btn.Text = "SPEED: " .. (SPEED_ENABLED and "ON" or "OFF")
+        elseif btn == FlyBtn then
+            FLY_ENABLED = not FLY_ENABLED
+            UpdateFly()
+            btn.Text = "FLY: " .. (FLY_ENABLED and "ON" or "OFF")
         elseif btn == CloseBtn then
-            CreateTween(MainGroup, {GroupTransparency = 1}, 0.2).Completed:Connect(function()
+            CreateTween(MainGroup, {GroupTransparency = 1}, 0.25).Completed:Connect(function()
                 ScreenGui:Destroy()
             end)
+        elseif btn == MinBtn then
+            IS_MINIMIZED = not IS_MINIMIZED
+            if IS_MINIMIZED then
+                MainFrame.Size = UDim2.new(0, 200, 0, 30)
+                Container.Visible = false
+                MinBtn.Text = "+"
+            else
+                MainFrame.Size = UDim2.new(0, 200, 0, 220)
+                Container.Visible = true
+                MinBtn.Text = "−"
+            end
         end
         Reset()
     end)
 end
 
-SetupAction(ESPBtn, true)
-SetupAction(SpeedBtn, true)
-SetupAction(CloseBtn, false)
+SetupButton(ESPBtn, true)
+SetupButton(SpeedBtn, true)
+SetupButton(FlyBtn, true)
+SetupButton(CloseBtn, false)
+SetupButton(MinBtn, false)
 
 local sliding = false
 
 local function UpdateSlider(input)
-    local ratio = math.clamp(
-        (input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X,
-        0,
-        1
-    )
+    local ratio = math.clamp((input.Position.X - SliderBG.AbsolutePosition.X) / SliderBG.AbsoluteSize.X, 0, 1)
     SliderFill.Size = UDim2.new(ratio, 0, 1, 0)
     WALK_SPEED_VALUE = math.floor(MIN_SPEED + ratio * (MAX_SPEED - MIN_SPEED))
     SliderLabel.Text = "VELOCIDADE: " .. WALK_SPEED_VALUE
     if SPEED_ENABLED then UpdateSpeed() end
 end
 
-SliderBG.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+SliderBG.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         sliding = true
-        UpdateSlider(i)
+        UpdateSlider(input)
     end
 end)
 
-UserInputService.InputChanged:Connect(function(i)
-    if sliding and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-        UpdateSlider(i)
+UserInputService.InputChanged:Connect(function(input)
+    if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        UpdateSlider(input)
     end
 end)
 
@@ -255,25 +413,20 @@ UserInputService.InputEnded:Connect(function()
     sliding = false
 end)
 
-local drag, dStart, sPos
+local drag, dragStart, startPos
 
-Header.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         drag = true
-        dStart = i.Position
-        sPos = MainFrame.Position
+        dragStart = input.Position
+        startPos = MainFrame.Position
     end
 end)
 
-UserInputService.InputChanged:Connect(function(i)
-    if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = i.Position - dStart
-        MainFrame.Position = UDim2.new(
-            sPos.X.Scale,
-            sPos.X.Offset + delta.X,
-            sPos.Y.Scale,
-            sPos.Y.Offset + delta.Y
-        )
+UserInputService.InputChanged:Connect(function(input)
+    if drag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -287,6 +440,11 @@ CreateTween(MainGroup, {GroupTransparency = 0}, 0.4)
 Players.PlayerAdded:Connect(ApplyHighlight)
 
 LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
+    task.wait(1)
     UpdateSpeed()
+    if FLY_ENABLED then UpdateFly() end
 end)
+
+for _, player in Players:GetPlayers() do
+    ApplyHighlight(player)
+end
